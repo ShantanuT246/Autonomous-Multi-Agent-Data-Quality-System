@@ -96,6 +96,44 @@ async def upload_dataset(file: UploadFile = File(...)):
     return DatasetUploadResponse(**metadata)
 
 
+@router.post("/load-sample", response_model=DatasetUploadResponse, status_code=status.HTTP_201_CREATED)
+def load_sample_dataset(sample_name: str = "customers"):
+    """Load one of the pre-built messy test datasets."""
+    sample_files = {
+        "customers": "sample_data/customers_messy.csv",
+        "employees": "sample_data/employees_messy.csv",
+        "products": "sample_data/products_messy.csv",
+    }
+    path_str = sample_files.get(sample_name.lower())
+    if not path_str or not Path(path_str).exists():
+        raise HTTPException(status_code=400, detail=f"Sample '{sample_name}' not found. Available: {list(sample_files.keys())}")
+
+    path = Path(path_str)
+    with open(path, "rb") as f:
+        content = f.read()
+
+    df = pd.read_csv(io.BytesIO(content))
+    dataset_id = f"ds_{uuid.uuid4().hex[:10]}"
+    storage_path = settings.STORAGE_DIR / "datasets" / f"{dataset_id}.csv"
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(storage_path, "wb") as f:
+        f.write(content)
+
+    preview = df.head(10).replace({float("nan"): None}).to_dict(orient="records")
+    metadata = {
+        "dataset_id": dataset_id,
+        "filename": path.name,
+        "file_path": str(storage_path),
+        "file_size_bytes": len(content),
+        "rows": int(len(df)),
+        "columns": int(len(df.columns)),
+        "column_names": df.columns.tolist(),
+        "preview": preview,
+    }
+    repo.save_dataset(metadata)
+    return DatasetUploadResponse(**metadata)
+
+
 @router.get("/{dataset_id}", response_model=DatasetUploadResponse)
 def get_dataset(dataset_id: str):
     """Retrieve uploaded dataset metadata and preview."""

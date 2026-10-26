@@ -44,16 +44,16 @@ app.add_middleware(
 app.include_router(api_router)
 
 
-@app.get("/", tags=["health"])
-def root():
-    return {
-        "status": "online",
-        "service": "Autonomous Multi-Agent Data Quality API",
-        "version": "1.0.0",
-        "docs_url": "/docs",
-    }
-
-
 @app.get("/health", tags=["health"])
 def health_check():
     return {"status": "healthy", "environment": settings.ENVIRONMENT}
+
+
+# Mount Single Page Application frontend
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
+frontend_dir = Path("frontend")
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # Gemini LLM Settings
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-1.5-pro"
+    GEMINI_MODEL: str = "gemini-2.0-flash"
     LLM_TEMPERATURE: float = 0.1
     LLM_TIMEOUT_SECONDS: int = 45
 

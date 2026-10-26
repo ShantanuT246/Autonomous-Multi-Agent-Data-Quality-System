@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autonomous Multi-Agent Data Quality System</title>
+  <meta name="description" content="Autonomous, explainable data quality cleaning powered by Gemini, LangGraph, and deterministic Scikit-learn/Pandas tools.">
+  
+  <!-- Modern Vercel-style Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="header">
+    <a href="#" class="brand">
+      <div class="brand-logo">▲</div>
+      <span class="brand-title">DataQuality.ai</span>
+      <span class="brand-badge">Multi-Agent</span>
+    </a>
+
+    <div class="header-actions">
+      <div class="status-indicator">
+        <span class="status-dot"></span>
+        <span id="backendStatus">Backend Online</span>
+      </div>
+
+      <button id="runsDrawerBtn" class="btn-secondary" title="View past runs">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span>History</span>
+        <span id="runsCountBadge" class="brand-badge" style="padding: 1px 6px;">0</span>
+      </button>
+
+      <button id="themeToggleBtn" class="btn-icon" title="Toggle Light/Dark Theme">
+        <!-- Sun icon -->
+        <svg id="sunIcon" style="display:none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <!-- Moon icon -->
+        <svg id="moonIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="container">
+
+    <!-- Upload Section -->
+    <section class="card" id="uploadSection">
+      <div class="card-header">
+        <div>
+          <h1 class="card-title">Upload Dataset for Cleaning</h1>
+          <p class="card-subtitle">Drop messy CSV or Excel datasets to initiate multi-agent reasoning and automated cleaning.</p>
+        </div>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <div class="dropzone-title">Click to upload or drag and drop</div>
+        <div class="dropzone-desc">CSV or Excel spreadsheets up to 50 MB</div>
+        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display: none;">
+
+        <div class="sample-buttons">
+          <span style="font-size: 12px; color: var(--text-secondary); align-self: center;">Quick Test Samples:</span>
+          <button type="button" class="btn-sample" data-sample="customers">⚡ Messy Customers</button>
+          <button type="button" class="btn-sample" data-sample="employees">⚡ Messy Employees</button>
+          <button type="button" class="btn-sample" data-sample="products">⚡ Messy Products</button>
+        </div>
+      </div>
+
+      <!-- Dataset Metadata Preview -->
+      <div id="datasetDetails" style="display: none; margin-top: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h3 id="datasetName" style="font-size: 15px; font-weight: 600;">dataset.csv</h3>
+            <span id="datasetStats" style="font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono);">0 rows · 0 cols</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label for="maxIterSelect" style="font-size: 12px; color: var(--text-secondary);">Max Iterations:</label>
+              <select id="maxIterSelect" style="background: var(--bg-muted); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 4px 8px; font-size: 12px;">
+                <option value="2">2 passes</option>
+                <option value="3" selected>3 passes (default)</option>
+                <option value="4">4 passes</option>
+              </select>
+            </div>
+
+            <button id="startRunBtn" class="btn-primary">
+              <span>Start Autonomous Pipeline</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Preview Table -->
+        <div class="table-container" style="max-height: 240px;">
+          <table id="previewTable">
+            <thead id="previewHead"></thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pipeline Live Progress Section -->
+    <section class="card" id="pipelineSection" style="display: none;">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">Multi-Agent Workflow Progression</h2>
+          <p class="card-subtitle" id="pipelineStatusText">Initializing agents...</p>
+        </div>
+        <div id="activeIterationBadge" class="brand-badge">Iteration 0</div>
+      </div>
+
+      <!-- Agent Step Nodes -->
+      <div class="timeline-container">
+        <div class="timeline-line"></div>
+        
+        <div class="timeline-step" id="step-profiler">
+          <div class="step-node">1</div>
+          <span class="step-label">Profiler</span>
+        </div>
+
+        <div class="timeline-step" id="step-detector">
+          <div class="step-node">2</div>
+          <span class="step-label">Detector</span>
+        </div>
+
+        <div class="timeline-step" id="step-planner">
+          <div class="step-node">3</div>
+          <span class="step-label">Planner</span>
+        </div>
+
+        <div class="timeline-step" id="step-cleaner">
+          <div class="step-node">4</div>
+          <span class="step-label">Cleaner</span>
+        </div>
+
+        <div class="timeline-step" id="step-validator">
+          <div class="step-node">5</div>
+          <span class="step-label">Validator</span>
+        </div>
+
+        <div class="timeline-step" id="step-reporter">
+          <div class="step-node">6</div>
+          <span class="step-label">Reporter</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Results Dashboard Section -->
+    <section id="resultsSection" style="display: none;">
+
+      <!-- Score Hero Grid -->
+      <div class="score-grid">
+        <div class="score-hero-card">
+          <div class="score-header">
+            <span style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">QUALITY SCORE</span>
+            <span id="scoreDeltaBadge" class="score-delta-badge">+0.0 pts</span>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 1rem;">
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted);">INITIAL</div>
+              <div id="initialScoreNum" class="score-number" style="color: var(--text-secondary); font-size: 28px;">0.0</div>
+            </div>
+            <span style="font-size: 20px; color: var(--text-muted);">→</span>
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted);">FINAL</div>
+              <div id="finalScoreNum" class="score-number" style="color: var(--accent);">0.0</div>
+            </div>
+          </div>
+          <div style="font-size: 12px; color: var(--text-secondary);">Target benchmark: 100.0 (Clean Standard)</div>
+        </div>
+
+        <!-- Dimension Components Card -->
+        <div class="card" style="margin-bottom: 0;">
+          <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-secondary);">DIMENSION BREAKDOWN</h3>
+          <div id="scoreComponentsList" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;"></div>
+        </div>
+      </div>
+
+      <!-- Result Tabs Navigation -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="overview">Overview & AI Summary</button>
+        <button class="tab-btn" data-tab="issues">Detected Issues (<span id="issuesCount">0</span>)</button>
+        <button class="tab-btn" data-tab="log">Operations Log (<span id="opsCount">0</span>)</button>
+        <button class="tab-btn" data-tab="charts">Visual Charts</button>
+        <button class="tab-btn" data-tab="cleaned">Cleaned Data & Exports</button>
+      </div>
+
+      <!-- Tab Content: Overview -->
+      <div class="tab-pane active" id="tab-overview">
+        <div class="card">
+          <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 0.5rem;">Executive Narrative Summary</h3>
+          <p id="narrativeSummary" style="font-size: 14px; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.6;"></p>
+
+          <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 0.5rem;">Agent Decisions & Reasoning</h3>
+          <p id="narrativeDecisions" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.6;"></p>
+
+          <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 0.5rem;">Recommended Manual Checks</h3>
+          <ul id="manualChecksList" style="list-style: disc inside; font-size: 13px; color: var(--text-secondary); line-height: 1.6;"></ul>
+        </div>
+      </div>
+
+      <!-- Tab Content: Detected Issues -->
+      <div class="tab-pane" id="tab-issues" style="display: none;">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Severity</th>
+                <th>Column</th>
+                <th>Issue Type</th>
+                <th>Description</th>
+                <th>Affected Rows</th>
+                <th>Examples</th>
+              </tr>
+            </thead>
+            <tbody id="issuesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab Content: Operations Log -->
+      <div class="tab-pane" id="tab-log" style="display: none;">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Target Column</th>
+                <th>Action Taken</th>
+                <th>Records Modified</th>
+                <th>Before Sample</th>
+                <th>After Sample</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab Content: Charts -->
+      <div class="tab-pane" id="tab-charts" style="display: none;">
+        <div class="charts-grid" id="chartsGrid"></div>
+      </div>
+
+      <!-- Tab Content: Cleaned Data & Exports -->
+      <div class="tab-pane" id="tab-cleaned" style="display: none;">
+        <div class="card" style="margin-bottom: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h3 style="font-size: 15px; font-weight: 600;">Cleaned Dataset Snapshot</h3>
+              <p style="font-size: 13px; color: var(--text-secondary);">Direct download of the verified, normalized data.</p>
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+              <a id="downloadCsvBtn" href="#" class="btn-primary" download>Download CSV</a>
+              <a id="downloadXlsxBtn" href="#" class="btn-secondary" download>Download Excel</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-container" style="max-height: 380px;">
+          <table id="cleanedTable">
+            <thead id="cleanedHead"></thead>
+            <tbody id="cleanedBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Past Runs Drawer -->
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="runsDrawer">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+      <h3 style="font-size: 16px; font-weight: 600;">Run History</h3>
+      <button id="closeDrawerBtn" class="btn-icon">✕</button>
+    </div>
+    <div id="runsHistoryList" style="overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+      <div style="font-size: 13px; color: var(--text-muted); text-align: center; margin-top: 2rem;">No past runs found.</div>
+    </div>
+  </aside>
+
+  <!-- Client Application JS -->
+  <script src="app.js"></script>
+</body>
+</html>

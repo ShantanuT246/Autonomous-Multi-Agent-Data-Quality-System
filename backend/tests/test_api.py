@@ -6,14 +6,22 @@ from backend.app.main import app
 client = TestClient(app)
 
 
-def test_health_endpoints():
+def test_health_and_frontend_endpoints():
     res = client.get("/")
     assert res.status_code == 200
-    assert res.json()["status"] == "online"
+    assert "DataQuality.ai" in res.text
 
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["status"] == "healthy"
+
+
+def test_load_sample_dataset():
+    res = client.post("/api/datasets/load-sample?sample_name=customers")
+    assert res.status_code == 201
+    data = res.json()
+    assert data["filename"] == "customers_messy.csv"
+    assert data["rows"] == 11
 
 
 def test_dataset_upload_and_run_flow():
