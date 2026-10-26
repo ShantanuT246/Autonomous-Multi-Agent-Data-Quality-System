@@ -1,5 +1,6 @@
 import io
 import time
+import unittest.mock
 from fastapi.testclient import TestClient
 from backend.app.main import app
 
@@ -42,16 +43,16 @@ def test_dataset_upload_and_run_flow():
     assert get_ds.status_code == 200
     assert get_ds.json()["dataset_id"] == dataset_id
 
-    # 3. Trigger cleaning run
-    run_res = client.post("/api/runs", json={"dataset_id": dataset_id, "max_iterations": 2})
-    assert run_res.status_code == 202
-    run_data = run_res.json()
-    assert "run_id" in run_data
-    run_id = run_data["run_id"]
+    # 3. Trigger cleaning run (mock pipeline to test endpoint contract instantly)
+    with unittest.mock.patch("backend.app.api.runs.run_cleaning_pipeline") as mock_pipeline:
+        run_res = client.post("/api/runs", json={"dataset_id": dataset_id, "max_iterations": 2})
+        assert run_res.status_code == 202
+        run_data = run_res.json()
+        assert "run_id" in run_data
+        run_id = run_data["run_id"]
+        assert mock_pipeline.called
 
     # 4. Check run status
-    # Wait briefly for background execution to start/finish
-    time.sleep(2.0)
     check_run = client.get(f"/api/runs/{run_id}")
     assert check_run.status_code == 200
     assert check_run.json()["run_id"] == run_id
