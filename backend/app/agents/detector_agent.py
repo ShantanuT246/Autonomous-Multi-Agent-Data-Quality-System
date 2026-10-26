@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, Dict, List
 from pydantic import BaseModel, Field
+from backend.app.db.repository import repo
 from backend.app.graph.state import CleaningState, load_dataframe_ref
 from backend.app.llm.client import call_llm
 from backend.app.schemas.enums import IssueType, RunStatus, Severity
@@ -27,8 +28,22 @@ def detector_node(state: CleaningState) -> Dict[str, Any]:
     current_ref = state.get("current_df_ref") or state.get("original_df_ref")
     df = load_dataframe_ref(current_ref)
 
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="detector",
+        level="INFO",
+        message=f"Executing statistical detectors across {len(df.columns)} columns (missing values, duplicates, outliers, types, formats)...",
+    )
+
     # 1. Run statistical rule-based detectors
     statistical_issues: List[Issue] = run_all_statistical_detectors(df)
+
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="detector",
+        level="INFO",
+        message=f"Statistical analysis identified {len(statistical_issues)} preliminary defects.",
+    )
 
     # 2. Prepare compact profile for LLM reasoning
     profile = state.get("current_profile", {})
@@ -64,6 +79,12 @@ INSTRUCTIONS:
 """
 
     llm_issues: List[Issue] = []
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="detector",
+        level="LLM",
+        message="Calling Gemini 3.1 Flash Lite for semantic reasoning & contextual anomaly discovery...",
+    )
     try:
         response = call_llm(
             prompt=llm_prompt,
@@ -77,8 +98,20 @@ INSTRUCTIONS:
             temperature=0.1,
         )
         llm_issues = response.issues
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="detector",
+            level="LLM",
+            message=f"Gemini identified {len(llm_issues)} semantic/business-logic issue candidates.",
+        )
     except Exception as e:
         logger.warning(f"[{run_id}] LLM issue detection fallback: {e}")
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="detector",
+            level="WARN",
+            message=f"Gemini reasoning completed with fallback: {e}",
+        )
 
     # 3. Merge and deduplicate issues
     combined: List[Issue] = list(statistical_issues)
@@ -95,6 +128,16 @@ INSTRUCTIONS:
     # Sort issues by severity priority: critical > high > medium > low
     severity_order = {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3}
     combined.sort(key=lambda x: severity_order.get(x.severity, 4))
+
+    critical_count = sum(1 for i in combined if i.severity == Severity.CRITICAL)
+    high_count = sum(1 for i in combined if i.severity == Severity.HIGH)
+
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="detector",
+        level="SUCCESS",
+        message=f"Detector Agent compiled {len(combined)} prioritized quality defects ({critical_count} critical, {high_count} high severity).",
+    )
 
     logger.info(f"[{run_id}] Detector Node complete. Found {len(combined)} total issues.")
 

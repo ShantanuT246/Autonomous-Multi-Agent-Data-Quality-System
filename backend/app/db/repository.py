@@ -15,6 +15,7 @@ def serialize_doc(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 class DBRepository:
     def __init__(self):
         self._db = None
+        self._memory_pipeline_logs: Dict[str, List[Dict[str, Any]]] = {}
 
     @property
     def db(self):
@@ -148,6 +149,60 @@ class DBRepository:
     def get_report(self, run_id: str) -> Optional[Dict[str, Any]]:
         doc = self.db.reports.find_one({"run_id": run_id})
         return serialize_doc(doc)
+
+    def __init__(self):
+        self._db = None
+        self._memory_pipeline_logs: Dict[str, List[Dict[str, Any]]] = {}
+        self._log_listeners: Dict[str, List[Any]] = {}
+
+    def register_log_listener(self, run_id: str, callback: Any):
+        self._log_listeners.setdefault(run_id, []).append(callback)
+
+    def unregister_log_listener(self, run_id: str, callback: Any):
+        if run_id in self._log_listeners and callback in self._log_listeners[run_id]:
+            self._log_listeners[run_id].remove(callback)
+
+    # --- Pipeline Logs ---
+    def add_pipeline_log(
+        self,
+        run_id: str,
+        stage: str,
+        level: str,
+        message: str,
+        details: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        record = {
+            "run_id": run_id,
+            "stage": stage,
+            "level": level,
+            "message": message,
+            "details": details,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        self._memory_pipeline_logs.setdefault(run_id, []).append(dict(record))
+        try:
+            self.db.pipeline_logs.insert_one(dict(record))
+        except Exception:
+            pass
+
+        # Notify any active listeners (e.g. SSE broadcasters)
+        for listener in list(self._log_listeners.get(run_id, [])):
+            try:
+                listener(dict(record))
+            except Exception:
+                pass
+
+        return serialize_doc(record)
+
+    def get_pipeline_logs(self, run_id: str) -> List[Dict[str, Any]]:
+        try:
+            cursor = self.db.pipeline_logs.find({"run_id": run_id}).sort("timestamp", 1)
+            docs = [serialize_doc(doc) for doc in cursor]
+            if docs:
+                return docs
+        except Exception:
+            pass
+        return self._memory_pipeline_logs.get(run_id, [])
 
 
 repo = DBRepository()

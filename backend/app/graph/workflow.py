@@ -127,6 +127,13 @@ def run_cleaning_pipeline(
                 "final_score": current_state.get("final_score"),
             })
 
+            repo.add_pipeline_log(
+                run_id=run_id,
+                stage=node_name,
+                level="INFO",
+                message=f"Agent '{node_name.capitalize()}' node execution finished (Iteration {current_state.get('iteration', 0)}).",
+            )
+
             # Notify UI subscriber if callback given
             if progress_callback:
                 msg = f"Agent '{node_name}' finished step."

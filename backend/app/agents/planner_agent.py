@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, Dict, List
 from pydantic import BaseModel, Field
+from backend.app.db.repository import repo
 from backend.app.graph.state import CleaningState
 from backend.app.llm.client import call_llm
 from backend.app.schemas.enums import ActionType, IssueType, RiskLevel, RunStatus
@@ -101,6 +102,12 @@ CRITICAL PLANNING RULES:
 """
 
     planned_actions: List[PlannedAction] = []
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="planner",
+        level="LLM",
+        message=f"Prompting Gemini 3.1 Flash Lite to formulate optimal cleaning strategy for {len(issues)} issues...",
+    )
 
     try:
         res: LLMPlan = call_llm(
@@ -114,12 +121,30 @@ CRITICAL PLANNING RULES:
             temperature=0.1,
         )
         planned_actions = res.actions
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="planner",
+            level="LLM",
+            message=f"Gemini proposed {len(planned_actions)} transformation actions.",
+        )
     except Exception as e:
         logger.warning(f"[{run_id}] LLM planner fallback: {e}")
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="planner",
+            level="WARN",
+            message=f"Gemini planner encountered error: {e}. Utilizing deterministic fallback.",
+        )
 
     # Fallback heuristic planning if LLM produces empty actions
     if not planned_actions:
         planned_actions = _generate_heuristic_plan(issues)
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="planner",
+            level="INFO",
+            message=f"Heuristic planner generated {len(planned_actions)} default fallback operations.",
+        )
 
     # Post-process, validate columns exist, and sort by canonical order
     valid_actions = []
@@ -141,6 +166,24 @@ CRITICAL PLANNING RULES:
             return 999
 
     valid_actions.sort(key=action_priority)
+
+    # Log each planned action
+    for idx, act in enumerate(valid_actions, 1):
+        act_val = act.action.value if hasattr(act.action, "value") else str(act.action)
+        target = act.column or "Dataset"
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="planner",
+            level="ACTION",
+            message=f"Plan ACT-{idx}: {act_val} on '{target}' -> {act.rationale} (Risk: {act.risk_level.value})",
+        )
+
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="planner",
+        level="SUCCESS",
+        message=f"Planner finalized {len(valid_actions)} ordered cleaning operations.",
+    )
 
     logger.info(f"[{run_id}] Planner Node complete. Created {len(valid_actions)} planned actions.")
 

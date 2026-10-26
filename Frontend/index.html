@@ -170,6 +170,60 @@
           <span class="step-label">Reporter</span>
         </div>
       </div>
+
+      <!-- Real-Time Backend Execution & Agent Activity Console -->
+      <div class="terminal-card">
+        <div class="terminal-header">
+          <div class="terminal-title">
+            <span class="terminal-dots">
+              <span class="dot-red"></span>
+              <span class="dot-yellow"></span>
+              <span class="dot-green"></span>
+            </span>
+            <span style="font-weight: 600; font-size: 13px;">Backend Agent Activity & Node Execution Logs</span>
+            <span class="live-pill" id="liveLogsIndicator">
+              <span class="pulse-dot"></span>
+              <span>STREAMING</span>
+            </span>
+          </div>
+
+          <div class="terminal-controls">
+            <!-- Filter Pills -->
+            <div class="terminal-filters" id="terminalFilters">
+              <button class="filter-pill active" data-filter="all">All</button>
+              <button class="filter-pill" data-filter="profiler">Profiler</button>
+              <button class="filter-pill" data-filter="detector">Detector</button>
+              <button class="filter-pill" data-filter="planner">Planner</button>
+              <button class="filter-pill" data-filter="cleaner">Cleaner</button>
+              <button class="filter-pill" data-filter="validator">Validator</button>
+              <button class="filter-pill" data-filter="reporter">Reporter</button>
+            </div>
+
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <button id="toggleAutoscrollBtn" class="btn-terminal-action active" title="Toggle Auto-Scroll">
+                <span>Auto-scroll</span>
+              </button>
+              <button id="copyLogsBtn" class="btn-terminal-action" title="Copy Logs to Clipboard">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copy</span>
+              </button>
+              <button id="clearLogsBtn" class="btn-terminal-action" title="Clear Console">
+                <span>Clear</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="terminal-body" id="terminalLogsBody">
+          <div class="terminal-empty" id="terminalEmptyState">
+            <span class="spinner" style="width: 14px; height: 14px; display: inline-block;"></span>
+            <span>Waiting for agent node execution logs from backend...</span>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- Results Dashboard Section -->
@@ -208,6 +262,7 @@
         <button class="tab-btn active" data-tab="overview">Overview & AI Summary</button>
         <button class="tab-btn" data-tab="issues">Detected Issues (<span id="issuesCount">0</span>)</button>
         <button class="tab-btn" data-tab="log">Operations Log (<span id="opsCount">0</span>)</button>
+        <button class="tab-btn" data-tab="backend-logs">Backend Logs (<span id="logsTabCount">0</span>)</button>
         <button class="tab-btn" data-tab="charts">Visual Charts</button>
         <button class="tab-btn" data-tab="cleaned">Cleaned Data & Exports</button>
       </div>
@@ -262,6 +317,43 @@
             </thead>
             <tbody id="logTableBody"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Tab Content: Backend Logs -->
+      <div class="tab-pane" id="tab-backend-logs" style="display: none;">
+        <div class="card" style="margin-bottom: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h3 style="font-size: 15px; font-weight: 600;">Full Backend Agent Execution Audit Log</h3>
+              <p style="font-size: 13px; color: var(--text-secondary);">Comprehensive timeline of every agent step, reasoning call, tool execution, and state transition.</p>
+            </div>
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+              <input type="text" id="logSearchInput" placeholder="Search logs..." style="background: var(--bg-muted); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 12px; width: 160px;">
+              <select id="logStageSelect" style="background: var(--bg-muted); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 5px 8px; font-size: 12px;">
+                <option value="all">All Agents</option>
+                <option value="profiler">Profiler</option>
+                <option value="detector">Detector</option>
+                <option value="planner">Planner</option>
+                <option value="cleaner">Cleaner</option>
+                <option value="validator">Validator</option>
+                <option value="reporter">Reporter</option>
+                <option value="system">System / Workflow</option>
+              </select>
+              <button id="downloadLogsJsonBtn" class="btn-secondary" style="font-size: 12px; padding: 5px 10px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>Export JSON</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="terminal-body" id="tabTerminalLogsBody" style="max-height: 520px;">
+          <!-- Populated dynamically -->
         </div>
       </div>
 

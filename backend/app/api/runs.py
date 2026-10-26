@@ -35,6 +35,20 @@ def execute_pipeline_in_background(run_id: str, file_path: str, max_iterations: 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
+    def log_listener(log_entry: dict):
+        try:
+            loop.run_until_complete(
+                event_broker.broadcast_event(
+                    run_id=run_id,
+                    event_type="log",
+                    data=log_entry,
+                )
+            )
+        except Exception:
+            pass
+
+    repo.register_log_listener(run_id, log_listener)
+
     def progress_callback(stage: str, iteration: int, msg: str):
         loop.run_until_complete(
             event_broker.broadcast_event(
@@ -45,16 +59,36 @@ def execute_pipeline_in_background(run_id: str, file_path: str, max_iterations: 
         )
 
     try:
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="system",
+            level="INFO",
+            message=f"Pipeline queued: loading dataset from {Path(file_path).name}...",
+        )
         if file_path.endswith(".csv"):
             df = pd.read_csv(file_path)
         else:
             df = pd.read_excel(file_path)
+
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="system",
+            level="INFO",
+            message=f"Dataset loaded ({len(df)} rows, {len(df.columns)} columns). Launching LangGraph workflow...",
+        )
 
         state = run_cleaning_pipeline(
             df=df,
             run_id=run_id,
             max_iterations=max_iterations,
             progress_callback=progress_callback,
+        )
+
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="system",
+            level="SUCCESS",
+            message=f"Pipeline execution completed successfully with final score {state.get('final_score')}.",
         )
 
         loop.run_until_complete(
@@ -66,6 +100,12 @@ def execute_pipeline_in_background(run_id: str, file_path: str, max_iterations: 
         )
     except Exception as e:
         logger.exception(f"Background execution failed for run {run_id}: {e}")
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="system",
+            level="ERROR",
+            message=f"Pipeline failed with exception: {e}",
+        )
         repo.update_run(run_id, {"status": "failed", "error": str(e)})
         loop.run_until_complete(
             event_broker.broadcast_event(
@@ -75,6 +115,7 @@ def execute_pipeline_in_background(run_id: str, file_path: str, max_iterations: 
             )
         )
     finally:
+        repo.unregister_log_listener(run_id, log_listener)
         loop.close()
 
 
@@ -179,6 +220,12 @@ def get_run_plan(run_id: str):
 def get_run_log(run_id: str):
     """Retrieve audit log of all transformations applied."""
     return repo.get_cleaning_logs(run_id)
+
+
+@router.get("/{run_id}/pipeline-logs")
+def get_run_pipeline_logs(run_id: str):
+    """Retrieve detailed step-by-step backend agent and node execution logs."""
+    return repo.get_pipeline_logs(run_id)
 
 
 @router.get("/{run_id}/report")

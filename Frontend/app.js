@@ -52,6 +52,26 @@ const runsHistoryList = document.getElementById("runsHistoryList");
 const runsCountBadge = document.getElementById("runsCountBadge");
 
 // ========================
+// Terminal & Log State
+// ========================
+let currentRunLogs = [];
+let autoscrollLogs = true;
+let activeTerminalFilter = "all";
+
+const terminalLogsBody = document.getElementById("terminalLogsBody");
+const terminalEmptyState = document.getElementById("terminalEmptyState");
+const liveLogsIndicator = document.getElementById("liveLogsIndicator");
+const toggleAutoscrollBtn = document.getElementById("toggleAutoscrollBtn");
+const copyLogsBtn = document.getElementById("copyLogsBtn");
+const clearLogsBtn = document.getElementById("clearLogsBtn");
+const terminalFilters = document.getElementById("terminalFilters");
+const tabTerminalLogsBody = document.getElementById("tabTerminalLogsBody");
+const logsTabCount = document.getElementById("logsTabCount");
+const logSearchInput = document.getElementById("logSearchInput");
+const logStageSelect = document.getElementById("logStageSelect");
+const downloadLogsJsonBtn = document.getElementById("downloadLogsJsonBtn");
+
+// ========================
 // 1. Theme Management
 // ========================
 function initTheme() {
@@ -180,6 +200,167 @@ function renderTable(headEl, bodyEl, columns, rows) {
 }
 
 // ========================
+// Log Helpers & Formatting
+// ========================
+function formatLogTime(timestamp) {
+  if (!timestamp) return new Date().toTimeString().split(" ")[0];
+  const d = new Date(timestamp);
+  return isNaN(d.getTime()) ? new Date().toTimeString().split(" ")[0] : d.toTimeString().split(" ")[0];
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function createLogEntryElement(log) {
+  const row = document.createElement("div");
+  const stage = (log.stage || "system").toLowerCase();
+  const level = (log.level || "info").toLowerCase();
+  row.className = "log-entry";
+  row.dataset.stage = stage;
+  row.dataset.level = level;
+
+  const stageClass = `badge-stage-${stage}`;
+  const levelClass = `level-${level}`;
+  const timeFormatted = formatLogTime(log.timestamp);
+
+  let detailsHtml = "";
+  if (log.details && (typeof log.details === "object" ? Object.keys(log.details).length > 0 : String(log.details).trim())) {
+    const detailsStr = typeof log.details === "object" ? JSON.stringify(log.details, null, 2) : String(log.details);
+    const detailsId = "details_" + Math.random().toString(36).substr(2, 9);
+    detailsHtml = `
+      <span class="log-details-toggle" onclick="const el=document.getElementById('${detailsId}'); el.style.display = el.style.display === 'none' ? 'block' : 'none'">[details]</span>
+      <div id="${detailsId}" class="log-details-block" style="display: none;">${escapeHtml(detailsStr)}</div>
+    `;
+  }
+
+  row.innerHTML = `
+    <span class="log-time">[${timeFormatted}]</span>
+    <span class="log-stage-badge ${stageClass}">${log.stage || "SYSTEM"}</span>
+    <span class="log-level-badge ${levelClass}">${log.level || "INFO"}</span>
+    <div class="log-msg">${escapeHtml(log.message || "")} ${detailsHtml}</div>
+  `;
+
+  if (activeTerminalFilter !== "all" && stage !== activeTerminalFilter) {
+    row.style.display = "none";
+  }
+
+  return row;
+}
+
+function appendTerminalLog(logData) {
+  if (!terminalLogsBody) return;
+  const empty = terminalLogsBody.querySelector(".terminal-empty");
+  if (empty) empty.remove();
+
+  const el = createLogEntryElement(logData);
+  terminalLogsBody.appendChild(el);
+
+  if (autoscrollLogs) {
+    terminalLogsBody.scrollTop = terminalLogsBody.scrollHeight;
+  }
+
+  if (logsTabCount) {
+    logsTabCount.textContent = currentRunLogs.length;
+  }
+}
+
+function filterTerminalLogs(stage) {
+  activeTerminalFilter = stage;
+  document.querySelectorAll(".filter-pill").forEach((pill) => {
+    pill.classList.toggle("active", pill.dataset.filter === stage);
+  });
+
+  const entries = terminalLogsBody.querySelectorAll(".log-entry");
+  entries.forEach((el) => {
+    if (stage === "all" || el.dataset.stage === stage) {
+      el.style.display = "flex";
+    } else {
+      el.style.display = "none";
+    }
+  });
+}
+
+function renderTabLogs() {
+  if (!tabTerminalLogsBody) return;
+  const stageFilter = logStageSelect ? logStageSelect.value : "all";
+  const searchFilter = (logSearchInput ? logSearchInput.value : "").trim().toLowerCase();
+
+  const filtered = currentRunLogs.filter((log) => {
+    const matchStage = stageFilter === "all" || (log.stage || "").toLowerCase() === stageFilter;
+    const matchSearch = !searchFilter || (log.message || "").toLowerCase().includes(searchFilter) || (log.stage || "").toLowerCase().includes(searchFilter);
+    return matchStage && matchSearch;
+  });
+
+  tabTerminalLogsBody.innerHTML = "";
+  if (filtered.length === 0) {
+    tabTerminalLogsBody.innerHTML = `<div class="terminal-empty">No matching logs found.</div>`;
+    return;
+  }
+
+  filtered.forEach((log) => {
+    const el = createLogEntryElement(log);
+    el.style.display = "flex";
+    tabTerminalLogsBody.appendChild(el);
+  });
+}
+
+// Terminal controls setup
+if (terminalFilters) {
+  terminalFilters.addEventListener("click", (e) => {
+    if (e.target.classList.contains("filter-pill")) {
+      filterTerminalLogs(e.target.dataset.filter);
+    }
+  });
+}
+
+if (toggleAutoscrollBtn) {
+  toggleAutoscrollBtn.addEventListener("click", () => {
+    autoscrollLogs = !autoscrollLogs;
+    toggleAutoscrollBtn.classList.toggle("active", autoscrollLogs);
+  });
+}
+
+if (clearLogsBtn) {
+  clearLogsBtn.addEventListener("click", () => {
+    terminalLogsBody.innerHTML = `<div class="terminal-empty">Console cleared.</div>`;
+  });
+}
+
+if (copyLogsBtn) {
+  copyLogsBtn.addEventListener("click", () => {
+    const text = currentRunLogs
+      .map((l) => `[${formatLogTime(l.timestamp)}] [${(l.stage || 'SYSTEM').toUpperCase()}] [${(l.level || 'INFO').toUpperCase()}] ${l.message}`)
+      .join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = copyLogsBtn.innerHTML;
+      copyLogsBtn.innerHTML = `<span>Copied!</span>`;
+      setTimeout(() => (copyLogsBtn.innerHTML = orig), 2000);
+    });
+  });
+}
+
+if (logSearchInput) logSearchInput.addEventListener("input", renderTabLogs);
+if (logStageSelect) logStageSelect.addEventListener("change", renderTabLogs);
+
+if (downloadLogsJsonBtn) {
+  downloadLogsJsonBtn.addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(currentRunLogs, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pipeline_logs_${currentRunId || 'run'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+// ========================
 // 3. Pipeline Execution & SSE
 // ========================
 const STAGE_ORDER = ["profiler", "detector", "planner", "cleaner", "validator", "reporter"];
@@ -203,6 +384,13 @@ startRunBtn.addEventListener("click", async () => {
     currentRunId = data.run_id;
 
     // Reset UI for execution
+    currentRunLogs = [];
+    terminalLogsBody.innerHTML = `
+      <div class="terminal-empty" id="terminalEmptyState">
+        <span class="spinner" style="width: 14px; height: 14px; display: inline-block;"></span>
+        <span>Streaming backend agent node execution logs...</span>
+      </div>
+    `;
     pipelineSection.style.display = "block";
     resultsSection.style.display = "none";
     STAGE_ORDER.forEach((s) => {
@@ -227,6 +415,17 @@ function listenToStream(runId) {
   eventSource.addEventListener("progress", (e) => {
     const data = JSON.parse(e.data);
     updatePipelineUI(data.stage, data.iteration, data.message);
+  });
+
+  eventSource.addEventListener("log", (e) => {
+    try {
+      const logData = JSON.parse(e.data);
+      currentRunLogs.push(logData);
+      appendTerminalLog(logData);
+      renderTabLogs();
+    } catch (err) {
+      console.error("Error parsing log event:", err);
+    }
   });
 
   eventSource.addEventListener("complete", async (e) => {
@@ -272,10 +471,12 @@ function updatePipelineUI(currentStage, iteration, msg) {
 // ========================
 async function loadRunResults(runId) {
   try {
-    const [reportRes, logRes, issuesRes] = await Promise.all([
+    currentRunId = runId;
+    const [reportRes, logRes, issuesRes, pipelineLogsRes] = await Promise.all([
       fetch(`/api/runs/${runId}/report`),
       fetch(`/api/runs/${runId}/log`),
       fetch(`/api/runs/${runId}/issues`),
+      fetch(`/api/runs/${runId}/pipeline-logs`),
     ]);
 
     if (!reportRes.ok) throw new Error("Could not fetch final report");
@@ -283,7 +484,22 @@ async function loadRunResults(runId) {
     const report = await reportRes.json();
     const logs = logRes.ok ? await logRes.json() : [];
     const issues = issuesRes.ok ? await issuesRes.json() : [];
+    const pipelineLogs = pipelineLogsRes.ok ? await pipelineLogsRes.json() : [];
 
+    currentRunLogs = pipelineLogs;
+    if (logsTabCount) logsTabCount.textContent = currentRunLogs.length;
+
+    // Populate terminal logs body
+    if (terminalLogsBody) {
+      terminalLogsBody.innerHTML = "";
+      if (pipelineLogs.length > 0) {
+        pipelineLogs.forEach((l) => appendTerminalLog(l));
+      } else {
+        terminalLogsBody.innerHTML = `<div class="terminal-empty">No backend logs recorded for this run.</div>`;
+      }
+    }
+
+    renderTabLogs();
     displayReportDashboard(runId, report, logs, issues);
   } catch (err) {
     console.error("Error loading results:", err);

@@ -63,3 +63,9 @@ def test_upload_invalid_extension():
     res = client.post("/api/datasets/upload", files=fake_file)
     assert res.status_code == 400
     assert "Unsupported file format" in res.json()["detail"]
+
+
+def test_get_run_pipeline_logs():
+    res = client.get("/api/runs/run_test_nonexistent/pipeline-logs")
+    assert res.status_code == 200
+    assert isinstance(res.json(), list)

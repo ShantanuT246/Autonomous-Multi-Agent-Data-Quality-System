@@ -44,6 +44,13 @@ def reporter_node(state: CleaningState) -> Dict[str, Any]:
     validation = state.get("validation_result", {})
     remaining_issues = validation.get("remaining_issues", [])
 
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="reporter",
+        level="INFO",
+        message="Generating visual audit comparison charts (missing values, duplicates, score progression, records modified)...",
+    )
+
     # 1. Generate before/after charts
     chart_paths = generate_pipeline_charts(
         original_df=df_original,
@@ -59,6 +66,13 @@ def reporter_node(state: CleaningState) -> Dict[str, Any]:
     run_output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = run_output_dir / "cleaned_dataset.csv"
     xlsx_path = run_output_dir / "cleaned_dataset.xlsx"
+
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="reporter",
+        level="INFO",
+        message=f"Exporting verified cleaned dataset to CSV ({csv_path.name}) and Excel ({xlsx_path.name})...",
+    )
 
     df_cleaned.to_csv(csv_path, index=False)
     try:
@@ -87,6 +101,13 @@ Ground your explanations STRICTLY in the actions above. Do not fabricate columns
         recommended_manual_checks=[i.get("description", "Inspect remaining anomaly") for i in remaining_issues[:3]],
     )
 
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="reporter",
+        level="LLM",
+        message="Prompting Gemini 3.1 Flash Lite to synthesize executive summary and data steward recommendations...",
+    )
+
     try:
         narrative_res = call_llm(
             prompt=prompt,
@@ -96,8 +117,20 @@ Ground your explanations STRICTLY in the actions above. Do not fabricate columns
             temperature=0.2,
         )
         narrative = narrative_res
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="reporter",
+            level="SUCCESS",
+            message="Gemini synthesized executive summary and recommendations.",
+        )
     except Exception as e:
         logger.warning(f"[{run_id}] Reporter LLM fallback: {e}")
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="reporter",
+            level="WARN",
+            message=f"Gemini reporting fallback used: {e}",
+        )
 
     total_records_affected = sum(entry.get("records_changed", 0) for entry in logs)
 
@@ -138,6 +171,13 @@ Ground your explanations STRICTLY in the actions above. Do not fabricate columns
         "score_improvement": score_delta,
         "iteration": state.get("iteration", 1),
     })
+
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="reporter",
+        level="SUCCESS",
+        message=f"Audit report saved to MongoDB. Final Score: {final_score:.1f}/100.0 (Improvement: {score_delta:+.1f} pts).",
+    )
 
     logger.info(f"[{run_id}] Reporter Node complete. Report saved to DB and disk.")
 

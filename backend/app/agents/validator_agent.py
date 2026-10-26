@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, List
 import pandas as pd
+from backend.app.db.repository import repo
 from backend.app.graph.state import CleaningState, load_dataframe_ref
 from backend.app.reports.quality_score import compute_quality_score
 from backend.app.schemas.enums import RunStatus
@@ -30,6 +31,13 @@ def validator_node(state: CleaningState) -> Dict[str, Any]:
     df_original = load_dataframe_ref(original_ref)
     df_cleaned = load_dataframe_ref(current_ref)
 
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="validator",
+        level="INFO",
+        message=f"[Iteration {iteration}] Running integrity guard checks and regression analysis...",
+    )
+
     # 1. Integrity checks
     row_count_before = len(df_original)
     row_count_after = len(df_cleaned)
@@ -49,6 +57,13 @@ def validator_node(state: CleaningState) -> Dict[str, Any]:
 
     integrity_passed = (row_loss_ratio <= 0.20) and (new_nulls == 0) and columns_preserved
 
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="validator",
+        level="SUCCESS" if integrity_passed else "WARN",
+        message=f"Integrity check {'PASSED' if integrity_passed else 'FAILED'}: rows {row_count_before} -> {row_count_after} (loss: {row_loss_ratio:.1%}, limit: 20%), new nulls: {new_nulls}, columns preserved: {columns_preserved}.",
+    )
+
     integrity_checks = IntegrityChecks(
         row_count_before=row_count_before,
         row_count_after=row_count_after,
@@ -65,6 +80,13 @@ def validator_node(state: CleaningState) -> Dict[str, Any]:
     new_score_obj = compute_quality_score(df_cleaned, remaining_issues)
     new_score = new_score_obj.total
 
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="validator",
+        level="INFO",
+        message=f"Re-scored Quality: {best_score:.1f} -> {new_score:.1f} ({new_score - best_score:+.1f} pts). Remaining defects: {len(remaining_issues)}.",
+    )
+
     regressions: List[str] = []
     effective_current_ref = current_ref
 
@@ -73,6 +95,13 @@ def validator_node(state: CleaningState) -> Dict[str, Any]:
         reason = f"Quality score regressed from {best_score} to {new_score}."
         regressions.append(reason)
         logger.warning(f"[{run_id}] Regression detected! {reason} Rolling back to {best_ref}...")
+
+        repo.add_pipeline_log(
+            run_id=run_id,
+            stage="validator",
+            level="WARN",
+            message=f"REGRESSION DETECTED: Score dropped from {best_score} to {new_score}. Reverting to previous best snapshot {best_ref}.",
+        )
 
         # Record failed strategy
         plan = state.get("cleaning_plan", [])
@@ -92,9 +121,17 @@ def validator_node(state: CleaningState) -> Dict[str, Any]:
         best_ref = current_ref
 
     # 5. Judge overall pass condition
-    # Pass if no issues remain or score is high (>= 92) and no critical issues exist
     has_critical = any(i.severity.value == "critical" for i in remaining_issues)
     passed = (len(remaining_issues) == 0 or (new_score >= 92.0 and not has_critical)) and integrity_passed
+
+    verdict_text = "PASSED: Target quality threshold met without critical defects" if passed else f"IN PROGRESS: {len(remaining_issues)} defects remain"
+
+    repo.add_pipeline_log(
+        run_id=run_id,
+        stage="validator",
+        level="SUCCESS" if passed else "INFO",
+        message=f"Validator Verdict: {verdict_text}. Final Score: {new_score:.1f}/100.0.",
+    )
 
     message = (
         f"Validation passed with score {new_score}."
