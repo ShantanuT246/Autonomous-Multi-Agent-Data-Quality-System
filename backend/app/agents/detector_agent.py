@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, Dict, List
 from pydantic import BaseModel, Field
+from backend.app.config import settings
 from backend.app.db.repository import repo
 from backend.app.graph.state import CleaningState, load_dataframe_ref
 from backend.app.llm.client import call_llm
@@ -83,7 +84,7 @@ INSTRUCTIONS:
         run_id=run_id,
         stage="detector",
         level="LLM",
-        message="Calling Gemini 3.1 Flash Lite for semantic reasoning & contextual anomaly discovery...",
+        message=f"Calling Gemini ({settings.GEMINI_MODEL}) for semantic reasoning & contextual anomaly discovery...",
     )
     try:
         response = call_llm(

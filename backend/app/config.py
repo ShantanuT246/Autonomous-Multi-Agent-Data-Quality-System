@@ -13,9 +13,9 @@ class Settings(BaseSettings):
 
     # Gemini LLM Settings
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.1-flash-lite"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
     LLM_TEMPERATURE: float = 0.1
-    LLM_TIMEOUT_SECONDS: int = 45
+    LLM_TIMEOUT_SECONDS: int = 25
 
     # MongoDB Settings
     MONGODB_URI: str = "mongodb://localhost:27017"

@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, Dict, List
 from pydantic import BaseModel, Field
+from backend.app.config import settings
 from backend.app.db.repository import repo
 from backend.app.graph.state import CleaningState
 from backend.app.llm.client import call_llm
@@ -106,7 +107,7 @@ CRITICAL PLANNING RULES:
         run_id=run_id,
         stage="planner",
         level="LLM",
-        message=f"Prompting Gemini 3.1 Flash Lite to formulate optimal cleaning strategy for {len(issues)} issues...",
+        message=f"Prompting Gemini ({settings.GEMINI_MODEL}) to formulate optimal cleaning strategy for {len(issues)} issues...",
     )
 
     try:

@@ -34,42 +34,94 @@ def extract_json_block(text: str) -> str:
     return text
 
 
+import os
+from pathlib import Path
+
+
 class LLMClient:
-    def __init__(self):
-        self.api_key = settings.GEMINI_API_KEY
-        self.model_name = settings.GEMINI_MODEL
+    def get_api_key(self) -> str:
+        key = os.environ.get("GEMINI_API_KEY") or settings.GEMINI_API_KEY
+        if not key or len(key.strip()) < 5:
+            # Try reading .env directly in case it changed at runtime
+            env_path = Path(".env")
+            if env_path.exists():
+                for line in env_path.read_text().splitlines():
+                    if line.startswith("GEMINI_API_KEY="):
+                        key = line.split("=", 1)[1].strip()
+                        break
+        return key or ""
+
+    def get_model_name(self) -> str:
+        model = os.environ.get("GEMINI_MODEL") or settings.GEMINI_MODEL
+        if not model:
+            env_path = Path(".env")
+            if env_path.exists():
+                for line in env_path.read_text().splitlines():
+                    if line.startswith("GEMINI_MODEL="):
+                        model = line.split("=", 1)[1].strip()
+                        break
+        return model or "gemini-3.5-flash-lite"
 
     def is_configured(self) -> bool:
-        return bool(self.api_key and len(self.api_key.strip()) > 5)
+        key = self.get_api_key()
+        return bool(key and len(key.strip()) > 5)
 
     def _call_gemini_api(self, prompt: str, system_prompt: Optional[str] = None, temperature: float = 0.1) -> str:
-        """Call Gemini via google.genai or langchain_google_genai."""
-        try:
-            from google import genai
-            client = genai.Client(api_key=self.api_key)
-            full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-            response = client.models.generate_content(
-                model=self.model_name,
-                contents=full_prompt,
-                config={"temperature": temperature},
-            )
-            return response.text or ""
-        except Exception as e:
-            # Fallback to langchain_google_genai
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.messages import HumanMessage, SystemMessage
+        """Call Gemini via google.genai or langchain_google_genai with candidate model fallback and timeouts."""
+        api_key = self.get_api_key()
+        primary_model = self.get_model_name()
+        candidate_models = [primary_model, "gemini-3.5-flash-lite", "gemini-3.5-flash"]
+        # Deduplicate while preserving order
+        candidate_models = list(dict.fromkeys(candidate_models))
 
-            llm = ChatGoogleGenerativeAI(
-                model=self.model_name,
-                google_api_key=self.api_key,
-                temperature=temperature,
-            )
-            messages = []
-            if system_prompt:
-                messages.append(SystemMessage(content=system_prompt))
-            messages.append(HumanMessage(content=prompt))
-            res = llm.invoke(messages)
-            return str(res.content)
+        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+        last_exception = None
+
+        for model in candidate_models:
+            # 1. Try google.genai first
+            try:
+                from google import genai
+                from google.genai import types
+
+                client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=15000))
+                response = client.models.generate_content(
+                    model=model,
+                    contents=full_prompt,
+                    config={"temperature": temperature},
+                )
+                text = response.text or ""
+                if text.strip():
+                    return text
+            except Exception as e:
+                last_exception = e
+                logger.warning(f"google.genai call to {model} failed: {e}. Trying fallback...")
+
+            # 2. Try langchain_google_genai
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                from langchain_core.messages import HumanMessage, SystemMessage
+
+                llm = ChatGoogleGenerativeAI(
+                    model=model,
+                    google_api_key=api_key,
+                    temperature=temperature,
+                    max_retries=1,
+                    request_timeout=15,
+                )
+                messages = []
+                if system_prompt:
+                    messages.append(SystemMessage(content=system_prompt))
+                messages.append(HumanMessage(content=prompt))
+                res = llm.invoke(messages)
+                text = str(res.content)
+                if text.strip():
+                    return text
+            except Exception as e:
+                last_exception = e
+                logger.warning(f"langchain_google_genai call to {model} failed: {e}.")
+
+        # If all candidates failed, re-raise the last exception
+        raise last_exception or RuntimeError("All candidate Gemini models failed to respond.")
 
     def call_llm(
         self,
@@ -78,16 +130,15 @@ class LLMClient:
         system_prompt: Optional[str] = None,
         run_id: Optional[str] = None,
         temperature: float = 0.1,
-        max_retries: int = 3,
+        max_retries: int = 2,
     ) -> T:
         """
         Structured LLM caller with:
         - Structured schema prompt injection
-        - Exponential backoff retry
+        - Fast retry on invalid JSON
         - Markdown/JSON block extraction
-        - JSON repair / re-asking on validation failure
+        - Automatic fallback on 429 quota exhaustion or 503 high demand
         - MongoDB logging of all prompt/response pairs
-        - Offline mock fallback when GEMINI_API_KEY is not configured
         """
         schema_json = json.dumps(response_schema.model_json_schema(), indent=2)
         augmented_system_prompt = (
@@ -102,7 +153,6 @@ class LLMClient:
 
         if not self.is_configured():
             logger.info("GEMINI_API_KEY not configured. Generating schema-valid fallback response.")
-            # Produce mock/test valid response for offline development
             fallback_obj = self._generate_mock_response(prompt, response_schema)
             latency = (time.time() - start_time) * 1000
             repo.log_llm_call(
@@ -131,36 +181,47 @@ class LLMClient:
                     response_raw=raw_response,
                     parsed_data=parsed_obj.model_dump(),
                     latency_ms=latency,
-                    model=self.model_name,
+                    model=self.get_model_name(),
                     run_id=run_id,
                 )
                 return parsed_obj
 
             except (ValidationError, json.JSONDecodeError) as ve:
                 last_error = ve
-                logger.warning(f"JSON validation failed on attempt {attempt}: {ve}. Retrying with repair prompt...")
-                # Re-ask prompt with specific error context
+                logger.warning(f"JSON validation failed on attempt {attempt}: {ve}. Retrying...")
                 prompt = (
                     f"Previous attempt produced invalid JSON for the schema: {ve}\n"
                     f"Please fix and output ONLY the corrected JSON for:\n{prompt}"
                 )
-                time.sleep(1.5 * attempt)
+                time.sleep(1.0)
             except Exception as e:
                 last_error = e
+                err_str = str(e)
                 logger.warning(f"LLM API error on attempt {attempt}: {e}")
-                time.sleep(2.0 * attempt)
+                # If rate-limited (429) or high demand (503), do not hang in retries
+                if "429" in err_str or "Quota exceeded" in err_str or "503" in err_str or "high demand" in err_str:
+                    logger.warning("Quota or high demand encountered, proceeding to deterministic fallback.")
+                    break
+                time.sleep(1.0)
 
-        # If retries exhausted, log error and fallback
+        # Retries exhausted or API rate-limited: log error and safely use deterministic fallback
         latency = (time.time() - start_time) * 1000
         repo.log_llm_call(
             prompt=prompt,
             response_raw="",
             latency_ms=latency,
-            model=self.model_name,
+            model=self.get_model_name(),
             run_id=run_id,
             error=str(last_error),
         )
-        logger.error(f"LLM failed after {max_retries} attempts: {last_error}. Using fallback.")
+        if run_id:
+            repo.add_pipeline_log(
+                run_id=run_id,
+                stage="llm",
+                level="WARN",
+                message=f"Gemini API rate-limit/temporary demand issue encountered: {str(last_error)[:120]}. Safely continuing with deterministic rule-based intelligence.",
+            )
+        logger.warning(f"LLM fallback engaged: {last_error}.")
         return self._generate_mock_response(prompt, response_schema)
 
     def _generate_mock_response(self, prompt: str, response_schema: Type[T]) -> T:

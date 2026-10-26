@@ -105,7 +105,7 @@ Ground your explanations STRICTLY in the actions above. Do not fabricate columns
         run_id=run_id,
         stage="reporter",
         level="LLM",
-        message="Prompting Gemini 3.1 Flash Lite to synthesize executive summary and data steward recommendations...",
+        message=f"Prompting Gemini ({settings.GEMINI_MODEL}) to synthesize executive summary and data steward recommendations...",
     )
 
     try:
