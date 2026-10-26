@@ -1,0 +1,12 @@
+customer_id,name,age,gender,signup_date,annual_spend,loyalty_score
+101,Alice Smith ,28.0,Female,2023-01-15,"$1,250.50",85.0
+102,Bob Johnson,-5.0,M,06/20/2022,3400.00,92.0
+103,Charlie Brown,35.0,male,2023-03-12,560.20,
+104,Diana Prince,150.0,F,"Nov 5, 2021","$4,500.00",98.0
+105,Evan Wright,50.0,Male,2023-08-01,2100.75,74.0
+105,Evan Wright,50.0,Male,2023-08-01,2100.75,74.0
+106,  fiona gallagher,,female,2023-09-14,890.00,65.0
+107,George Clark,39.0,MALE ,2022-12-10,1780.00,80.0
+108,Hannah Abbott,29.0,Female,2024-02-18,N/A,88.0
+109,Ian Malcolm,46.0,m,2020-04-22,"$5,100",95.0
+110,Julia Roberts,33.0,,2023-05-30,1950.25,79.0

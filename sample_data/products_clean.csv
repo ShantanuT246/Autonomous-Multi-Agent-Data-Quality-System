@@ -1,0 +1,7 @@
+sku,name,category,price,weight_kg,in_stock
+PRD-01,Wireless Mouse,Electronics,29.99,0.15,True
+PRD-02,Ergonomic Keyboard,Electronics,89.5,0.85,True
+PRD-03,Office Desk Lamp,Home & Office,45.0,1.2,False
+PRD-04,USB-C Charging Cable,Electronics,14.99,0.08,True
+PRD-05,Stainless Water Bottle,Kitchen,22.0,0.4,True
+PRD-06,Noise Cancelling Headphones,Electronics,199.99,0.32,True

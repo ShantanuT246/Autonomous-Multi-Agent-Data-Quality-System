@@ -1,0 +1,56 @@
+import io
+import time
+from fastapi.testclient import TestClient
+from backend.app.main import app
+
+client = TestClient(app)
+
+
+def test_health_endpoints():
+    res = client.get("/")
+    assert res.status_code == 200
+    assert res.json()["status"] == "online"
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["status"] == "healthy"
+
+
+def test_dataset_upload_and_run_flow():
+    csv_content = b"name,age,salary\nAlice,25,$50000\nBob,-5,$60000\nAlice,25,$50000\n"
+    files = {"file": ("test_data.csv", io.BytesIO(csv_content), "text/csv")}
+
+    # 1. Upload
+    upload_res = client.post("/api/datasets/upload", files=files)
+    assert upload_res.status_code == 201
+    data = upload_res.json()
+    assert "dataset_id" in data
+    dataset_id = data["dataset_id"]
+    assert data["rows"] == 3
+    assert "preview" in data
+
+    # 2. Get dataset metadata
+    get_ds = client.get(f"/api/datasets/{dataset_id}")
+    assert get_ds.status_code == 200
+    assert get_ds.json()["dataset_id"] == dataset_id
+
+    # 3. Trigger cleaning run
+    run_res = client.post("/api/runs", json={"dataset_id": dataset_id, "max_iterations": 2})
+    assert run_res.status_code == 202
+    run_data = run_res.json()
+    assert "run_id" in run_data
+    run_id = run_data["run_id"]
+
+    # 4. Check run status
+    # Wait briefly for background execution to start/finish
+    time.sleep(2.0)
+    check_run = client.get(f"/api/runs/{run_id}")
+    assert check_run.status_code == 200
+    assert check_run.json()["run_id"] == run_id
+
+
+def test_upload_invalid_extension():
+    fake_file = {"file": ("malicious.exe", io.BytesIO(b"binary data"), "application/octet-stream")}
+    res = client.post("/api/datasets/upload", files=fake_file)
+    assert res.status_code == 400
+    assert "Unsupported file format" in res.json()["detail"]

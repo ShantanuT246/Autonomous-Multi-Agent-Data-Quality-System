@@ -112,13 +112,15 @@ The tests cover dataset profiling, preprocessing, and visualization.
 5. Generate before-and-after quality charts.
 6. Save the cleaned dataset and return the results.
 
-## Current Limitations
+## Current Limitations (and Backend Agent System Resolution)
 
-- Cleaning operations use predefined strategies.
-- Duplicate rows are reported but are not automatically removed.
-- Outliers are not automatically corrected.
-- Capitalization normalization may not be appropriate for every text column.
-- Integration with the full multi-agent workflow depends on the team's agent implementation.
+- Baseline `data_processing` uses predefined, linear strategies.
+- **Resolved in Backend Agent System (`backend/`):**
+  - **Duplicate removal:** Handled via deterministic `drop_duplicates` with subset configuration and audit logging.
+  - **Outlier handling:** Detected via IQR/Z-score and safely winsorized via `clip_outliers`.
+  - **Granular per-column control:** Imputation (median, mean, mode, constant, KNN) and casing are applied per column on demand.
+  - **Type casting & Unit normalization:** Strings like `$1,200` and units like `0.88 lbs` are dynamically normalized.
+  - **Closed-vocabulary LangGraph self-correction loop:** Enforces Pydantic safety guardrails, row-loss bounds, and rollback protection.
 
 ## Output Artifacts
 

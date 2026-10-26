@@ -1,0 +1,10 @@
+emp_id,department,role,years_experience,salary,status
+E01,engineering,Senior Engineer,8.0,115000,Active
+E02,Marketing ,marketing specialist,4.0,68000,Active
+E03,Engineering,Software Engineer,-2.0,92000,Active
+E04,Sales,Account Executive,5.0,10000000,Active
+E05,Finance,Financial Analyst,,85000,On Leave
+E06,ENGINEERING,Staff Engineer,12.0,160000,active
+E07,Sales,Sales Associate,1.0,52000,Active
+E07,Sales,Sales Associate,1.0,52000,Active
+E08,HR,HR Generalist,5.0,"64,000",Active
