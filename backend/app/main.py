@@ -1,3 +1,12 @@
+import os
+import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path regardless of execution directory
+project_root = str(Path(__file__).resolve().parent.parent.parent)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI
@@ -54,6 +63,14 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 frontend_dir = Path("frontend")
+if not frontend_dir.exists():
+    frontend_dir = Path(__file__).resolve().parent.parent.parent / "frontend"
+
 if frontend_dir.exists():
-    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)
 
